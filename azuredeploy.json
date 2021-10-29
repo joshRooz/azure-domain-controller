@@ -33,9 +33,9 @@
       },
       "defaultValue": "2016-Datacenter",
       "allowedValues": [
-        "2012-Datacenter",
-        "2012-R2-Datacenter",
-        "2016-Datacenter"
+        "2016-Datacenter",
+        "2019-Datacenter",
+        "2022-datacenter"
       ]
     },
     "_artifactsLocation": {
@@ -43,7 +43,7 @@
       "metadata": {
         "description": "The location of resources, such as templates and DSC modules, that the template depends on"
       },
-      "defaultValue": "https://raw.githubusercontent.com/mikepfeiffer/azure-domain-controller/master/"
+      "defaultValue": "https://raw.githubusercontent.com/joshrooz/azure-domain-controller/one/arm-digestion-phase/"
     },
     "_artifactsLocationSasToken": {
       "type": "securestring",
@@ -73,18 +73,18 @@
     {
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[variables('storageAccountName')]",
-      "apiVersion": "2016-01-01",
+      "apiVersion": "2019-06-01",
       "location": "[resourceGroup().location]",
       "sku": {
         "name": "Standard_LRS"
       },
-      "kind": "Storage",
+      "kind": "StorageV2",
       "properties": {}
     },
     {
       "type": "Microsoft.Network/publicIPAddresses",
       "name": "[variables('publicIPAddressName')]",
-      "apiVersion": "2016-03-30",
+      "apiVersion": "2020-05-01",
       "location": "[resourceGroup().location]",
       "properties": {
         "publicIPAllocationMethod": "Dynamic",
@@ -96,14 +96,14 @@
     {
       "type": "Microsoft.Compute/availabilitySets",
       "name": "[variables('adAvailabilitySetName')]",
-      "apiVersion": "2015-06-15",
+      "apiVersion": "2019-07-01",
       "location": "[resourceGroup().location]",
       "properties": {}
     },
     {
       "type": "Microsoft.Resources/deployments",
       "name": "VNet",
-      "apiVersion": "2016-02-01",
+      "apiVersion": "2019-05-01",
       "properties": {
         "mode": "Incremental",
         "templateLink": {
@@ -129,7 +129,7 @@
     {
       "type": "Microsoft.Network/loadBalancers",
       "name": "[variables('adLBName')]",
-      "apiVersion": "2016-03-30",
+      "apiVersion": "2020-05-01",
       "location": "[resourceGroup().location]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName'))]"
@@ -169,7 +169,7 @@
     {
       "type": "Microsoft.Network/networkInterfaces",
       "name": "[variables('adNicName')]",
-      "apiVersion": "2016-03-30",
+      "apiVersion": "2020-05-01",
       "location": "[resourceGroup().location]",
       "dependsOn": [
         "Microsoft.Resources/deployments/VNet",
@@ -203,7 +203,7 @@
     {
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[variables('adVMName')]",
-      "apiVersion": "2015-06-15",
+      "apiVersion": "2019-07-01",
       "location": "[resourceGroup().location]",
       "dependsOn": [
         "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
@@ -246,7 +246,7 @@
               "name": "[concat(variables('adVMName'), '-data-disk')]",
               "caching": "None",
               "createOption": "Empty",
-              "diskSizeGB": "1000",
+              "diskSizeGB": 32,
               "lun": 0
             }
           ]
@@ -261,9 +261,9 @@
       },
       "resources": [
         {
-          "type": "extensions",
+          "type": "Microsoft.Compute/virtualMachines/extensions",
           "name": "CreateADForest",
-          "apiVersion": "2015-06-15",
+          "apiVersion": "2021-07-01",
           "location": "[resourceGroup().location]",
           "dependsOn": [
             "[resourceId('Microsoft.Compute/virtualMachines', variables('adVMName'))]"
@@ -271,23 +271,26 @@
           "properties": {
             "publisher": "Microsoft.Powershell",
             "type": "DSC",
-            "typeHandlerVersion": "2.19",
+            "typeHandlerVersion": "2.80",
             "autoUpgradeMinorVersion": true,
+            "enableAutomaticUpgrade": true,
             "settings": {
-              "ModulesUrl": "[concat(parameters('_artifactsLocation'), '/DSC/CreateADPDC.zip', parameters('_artifactsLocationSasToken'))]",
-              "ConfigurationFunction": "CreateADPDC.ps1\\CreateADPDC",
-              "Properties": {
-                "DomainName": "[parameters('domainName')]",
-                "AdminCreds": {
-                  "UserName": "[parameters('adminUsername')]",
-                  "Password": "PrivateSettingsRef:AdminPassword"
-                }
+              "wmfVersion": "latest",
+              "configuragtion": {
+                "url": "[concat(parameters('_artifactsLocation'), '/DSC/CreateADPDC.zip')]",
+                "script": "CreateADPDC.ps1",
+                "function": "CreateADPDC"
+              },
+              "configurationArguments": {
+                "DomainName": "[parameters('domainName')]"
               }
             },
             "protectedSettings": {
-              "Items": {
+              "configurationArguments": {
+                "UserName": "[parameters('adminUsername')]",
                 "AdminPassword": "[parameters('adminPassword')]"
-              }
+              },
+              "configurationUrlSasToken": "[parameters('_artifactsLocationSasToken')]"
             }
           }
         }
@@ -296,7 +299,7 @@
     {
       "type": "Microsoft.Resources/deployments",
       "name": "UpdateVNetDNS",
-      "apiVersion": "2016-02-01",
+      "apiVersion": "2019-05-01",
       "dependsOn": [
         "[resourceId('Microsoft.Compute/virtualMachines/extensions', variables('adVMName'), 'CreateADForest')]"
       ],
