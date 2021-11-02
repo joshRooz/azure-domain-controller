@@ -38,12 +38,23 @@
         "2022-datacenter"
       ]
     },
+    "dscFunction": {
+      "type": "string",
+      "metadata": {
+        "description": "The DSC Configuration to apply to the VM"
+      },
+      "defaultValue": "ApplyNewDomain",
+      "allowedValues": [
+        "ApplyNewDomain",
+        "ApplyPromoteDC"
+      ]
+    },
     "_artifactsLocation": {
       "type": "string",
       "metadata": {
         "description": "The location of resources, such as templates and DSC modules, that the template depends on"
       },
-      "defaultValue": "https://raw.githubusercontent.com/joshrooz/azure-domain-controller/one/arm-digestion-phase/"
+      "defaultValue": "https://raw.githubusercontent.com/joshrooz/azure-domain-controller/one/arm-digestion-phase"
     },
     "_artifactsLocationSasToken": {
       "type": "securestring",
@@ -56,7 +67,6 @@
   "variables": {
     "virtualNetworkName": "adVNET",
     "virtualNetworkAddressRange": "10.0.0.0/16",
-    "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'adsa')]",
     "adLBFE": "LBFE",
     "adLBBE": "LBBE",
     "adRDPNAT": "adRDP",
@@ -70,17 +80,6 @@
     "adLBName": "adLoadBalancer"
   },
   "resources": [
-    {
-      "type": "Microsoft.Storage/storageAccounts",
-      "name": "[variables('storageAccountName')]",
-      "apiVersion": "2019-06-01",
-      "location": "[resourceGroup().location]",
-      "sku": {
-        "name": "Standard_LRS"
-      },
-      "kind": "StorageV2",
-      "properties": {}
-    },
     {
       "type": "Microsoft.Network/publicIPAddresses",
       "name": "[variables('publicIPAddressName')]",
@@ -96,9 +95,15 @@
     {
       "type": "Microsoft.Compute/availabilitySets",
       "name": "[variables('adAvailabilitySetName')]",
-      "apiVersion": "2019-07-01",
+      "apiVersion": "2021-07-01",
       "location": "[resourceGroup().location]",
-      "properties": {}
+      "sku": {
+        "name": "Aligned"
+      },
+      "properties": {
+        "platformFaultDomainCount": 2,
+        "platformUpdateDomainCount": 5
+      }
     },
     {
       "type": "Microsoft.Resources/deployments",
@@ -157,7 +162,7 @@
               "frontendIPConfiguration": {
                 "id": "[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', variables('adLBName'), variables('adLBFE'))]"
               },
-              "protocol": "tcp",
+              "protocol": "Tcp",
               "frontendPort": 3389,
               "backendPort": 3389,
               "enableFloatingIP": false
@@ -203,10 +208,9 @@
     {
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[variables('adVMName')]",
-      "apiVersion": "2019-07-01",
+      "apiVersion": "2021-07-01",
       "location": "[resourceGroup().location]",
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
         "[resourceId('Microsoft.Network/networkInterfaces', variables('adNicName'))]",
         "[resourceId('Microsoft.Compute/availabilitySets', variables('adAvailabilitySetName'))]",
         "[resourceId('Microsoft.Network/loadBalancers', variables('adLBName'))]"
@@ -231,18 +235,13 @@
             "version": "latest"
           },
           "osDisk": {
-            "name": "osdisk",
-            "vhd": {
-              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob, 'vhds/', variables('adVMName'), '-os-disk.vhd')]"
-            },
+            "name": "[concat(variables('adVMName'), '-osdisk')]",
             "caching": "ReadWrite",
-            "createOption": "FromImage"
+            "createOption": "FromImage",
+            "deleteOption": "Delete"
           },
           "dataDisks": [
             {
-              "vhd": {
-                "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob, 'vhds/', variables('adVMName'), '-data-disk.vhd')]"
-              },
               "name": "[concat(variables('adVMName'), '-data-disk')]",
               "caching": "None",
               "createOption": "Empty",
@@ -261,7 +260,7 @@
       },
       "resources": [
         {
-          "type": "Microsoft.Compute/virtualMachines/extensions",
+          "type": "extensions",
           "name": "CreateADForest",
           "apiVersion": "2021-07-01",
           "location": "[resourceGroup().location]",
@@ -273,13 +272,12 @@
             "type": "DSC",
             "typeHandlerVersion": "2.80",
             "autoUpgradeMinorVersion": true,
-            "enableAutomaticUpgrade": true,
             "settings": {
               "wmfVersion": "latest",
-              "configuragtion": {
-                "url": "[concat(parameters('_artifactsLocation'), '/DSC/CreateADPDC.zip')]",
-                "script": "CreateADPDC.ps1",
-                "function": "CreateADPDC"
+              "configuration": {
+                "url": "[concat(parameters('_artifactsLocation'), '/DSC/ADDomainServices.zip')]",
+                "script": "ADDomainServices.ps1",
+                "function": "[parameters('dscFunction')]"
               },
               "configurationArguments": {
                 "DomainName": "[parameters('domainName')]"
@@ -287,8 +285,10 @@
             },
             "protectedSettings": {
               "configurationArguments": {
-                "UserName": "[parameters('adminUsername')]",
-                "AdminPassword": "[parameters('adminPassword')]"
+                "AdminCreds": {
+                  "userName": "[parameters('adminUsername')]",
+                  "password": "[parameters('adminPassword')]"
+                }
               },
               "configurationUrlSasToken": "[parameters('_artifactsLocationSasToken')]"
             }
