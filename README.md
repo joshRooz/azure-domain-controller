@@ -20,12 +20,7 @@ This branch assumes terraform local state, remote state will be enabled later
   ```
 
 # NOTES
-I got tripped up (for the better part of a full day) by the Load Balancer conversion to terraform as an undocumented argument is required to maintain "Basic" SKU on the LB and Public IP. *UPDATE* -That's because it's no longer part of the schema... dropped a message in Terraform-Azure Slack channel to see what I'm missing. For now -
-Public IP - Standard & Zone Support
-Load Balancer - Standard & Zone Support
-&& outbound rule resource directly below
-
-To jump to Standard SKU - be sure to include an outbound rule or your VM will lose internet connectivity. Eg:
+If you jump to Standard SKU there are a few other changes... but be sure to include an outbound rule or your VM will lose internet connectivity. Eg:
 ```hcl
 resource "azurerm_lb_outbound_rule" "this" {
   name                    = "OutboundRule"
@@ -40,16 +35,5 @@ resource "azurerm_lb_outbound_rule" "this" {
 }
 ```
 
-The load balancer deployed fine but terraform bombed with -
-> Error: waiting for update of Backend Address Pool Address...
-> 
-> Code="Canceled" Message="Operation was canceled." 
-> Details=[{"code":"CanceledAndSupersededDueToAnotherOperation","message":"Operation PutLoadBalancerBackendAddressPoolOperation was canceled and superseded by operation PutLoadBalancerOperation."}]
-
-`terraform import -var-file=example.tfvars -var=subscription_id=<my-subscription> azurerm_lb_backend_address_pool_address.this /subscriptions/<my-subscription>/resourceGroups/rg-ad-test/providers/Microsoft.Network/loadBalancers/adLoadBalancer/backendAddressPools/LBBE/addresses/adVM`
-
-
 # Reference Links
-* https://docs.microsoft.com/en-us/azure/azure-resource-manager/templates/
 * https://docs.microsoft.com/en-us/azure/virtual-machines/extensions/dsc-template
-* https://docs.microsoft.com/en-us/azure/templates/microsoft.compute/2021-07-01/virtualmachines/extensions?tabs=json

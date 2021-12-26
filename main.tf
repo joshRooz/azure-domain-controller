@@ -7,9 +7,9 @@ resource "azurerm_public_ip" "this" {
   name                = var.public_ip_address_name
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
-  availability_zone   = "No-Zone" #local.az_support_by_region[lower(var.region)] ? "Zone-Redundant" : "No-Zone"
+  availability_zone   = "No-Zone"
   allocation_method   = "Static"
-  sku                 = "Standard"
+  sku                 = "Basic"
   domain_name_label   = var.dns_prefix
 }
 
@@ -164,7 +164,7 @@ resource "azurerm_lb" "this" {
   name                = var.ad_load_balancer_name
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
-  sku                 = "Standard"
+  sku                 = "Basic"
 
   frontend_ip_configuration {
     name                 = var.ad_load_balancer_frontend_name
@@ -178,11 +178,10 @@ resource "azurerm_lb_backend_address_pool" "this" {
   loadbalancer_id = azurerm_lb.this.id
 }
 
-resource "azurerm_lb_backend_address_pool_address" "this" {
-  name                    = var.ad_virtual_machine_name
+resource "azurerm_network_interface_backend_address_pool_association" "this" {
+  network_interface_id    = azurerm_network_interface.this.id
+  ip_configuration_name   = "ipconfig1"
   backend_address_pool_id = azurerm_lb_backend_address_pool.this.id
-  virtual_network_id      = azurerm_virtual_network.this.id
-  ip_address              = azurerm_network_interface.this.private_ip_address
 }
 
 resource "azurerm_lb_nat_rule" "rdp" {
@@ -205,18 +204,6 @@ resource "azurerm_lb_nat_rule" "rmgmt" {
   protocol                       = "Tcp"
   frontend_port                  = 5985
   backend_port                   = 5985
-}
-
-resource "azurerm_lb_outbound_rule" "this" {
-  name                    = "OutboundRule"
-  resource_group_name     = azurerm_resource_group.this.name
-  loadbalancer_id         = azurerm_lb.this.id
-  protocol                = "All"
-  backend_address_pool_id = azurerm_lb_backend_address_pool.this.id
-
-  frontend_ip_configuration {
-    name = var.ad_load_balancer_frontend_name
-  }
 }
 
 resource "azurerm_network_interface_nat_rule_association" "rdp" {
